@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commitsIn, labelFor, remoteKey, summarize } from '../hooks/register.tsx'
+import { commitsIn, csvText, labelFor, remoteKey, summarize } from '../hooks/register.tsx'
 import type { Rec } from '../hooks/register.tsx'
 
 const M = 60 * 1000
@@ -134,8 +134,7 @@ test('a turn still running counts for its client once it has spent something', a
     { t: t0, kind: 'start', session: 'a', root: '/r/acme', cost: 0 },
     { t: t0, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 10, r: resets }], cost: 0 },
     { t: t0 + M, kind: 'prompt', session: 'a', root: '/r/acme', origin: 'composer' },
-    // no turn line yet: the turn is still running
-    { t: t0 + 10 * M, kind: 'cost', session: 'a', cost: 2 },
+    // no turn line yet: the turn is still running, and the reading carries its cost so far
     { t: t0 + 12 * M, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 20, r: resets }], cost: 2.4 },
   ]
   const totals = summarize(recs, map, t0, t0 + H, t0 + H)
@@ -193,4 +192,11 @@ test('every clone of a repo shares one remote key', async () => {
     expect(remoteKey(url)).toBe('github.com/acme/site')
   }
   expect(remoteKey(null)).toBeNull()
+})
+
+test('CSV cells are quoted, and one a spreadsheet would run as a formula stays text', async () => {
+  expect(csvText('Fix the "booking" form')).toBe('"Fix the ""booking"" form"')
+  expect(csvText('=HYPERLINK("http://example.com")')).toBe('"\'=HYPERLINK(""http://example.com"")"')
+  expect(csvText('-1')).toBe('"\'-1"')
+  expect(csvText('acme')).toBe('"acme"')
 })

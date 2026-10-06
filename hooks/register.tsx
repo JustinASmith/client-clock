@@ -36,7 +36,6 @@ const period = atom({ plugin: 'client-clock', key: 'period' } as const, 'week')
 const PANE = 'client-clock'
 
 const IDLE_CAP_MS = 10 * 60 * 1000
-const COST_EVERY_MS = 60 * 1000
 const HUMAN_ORIGINS = new Set(['composer', 'bridge', 'sdk'])
 const PERSONAL = 'personal'
 const UNASSIGNED = 'unassigned'
@@ -52,7 +51,7 @@ type Limit = { k: string; p: number; r?: string }
 
 export type Rec = {
   t: number
-  kind: 'start' | 'prompt' | 'turn' | 'limits' | 'cost' | 'attach' | 'detach' | 'manual' | 'end'
+  kind: 'start' | 'prompt' | 'turn' | 'limits' | 'attach' | 'detach' | 'manual' | 'end'
   session?: string
   root?: string
   remote?: string
@@ -368,7 +367,7 @@ export function summarize(
           tot.agentMs += r.ms ?? 0
           tot.turns += 1
         }
-      } else if (r.kind === 'cost' || r.kind === 'limits') {
+      } else if (r.kind === 'limits') {
         mark(r.t, r.cost)
       } else if (r.kind === 'attach') {
         if (r.client && r.surface !== 'terminal') attached.set(r.client, r.t)
@@ -534,8 +533,11 @@ function money(usd: number) {
   return `$${usd.toFixed(usd < 100 ? 2 : 0)}`
 }
 
-function csvText(s: string) {
-  return `"${s.replace(/"/g, '""')}"`
+// Quoted for CSV. A leading =, +, - or @ gets a ' in front, so a spreadsheet shows the
+// value as text instead of running it as a formula (a commit message could start with one).
+export function csvText(s: string) {
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s
+  return `"${safe.replace(/"/g, '""')}"`
 }
 
 function clockTime(iso?: string) {
@@ -915,13 +917,11 @@ function table(head: string[], rows: Array<Array<string | number>>) {
 // ---------- hooks ----------
 
 let timer: { cancel: () => void } | undefined
-let lastCostAt = 0
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     ctx = null
     own = null
-    lastCostAt = 0
     const c = await context($)
     const map = await mapping($)
     const usage = await $.session.usage()
@@ -996,26 +996,18 @@ export const register: Register = on => {
     return next(e)
   })
 
-  // Readings of the usage windows, and the session's running cost as it grows (at most one
-  // a minute), so a turn still running counts for its client.
+  // Readings of the usage windows. The engine measures when a window moves a whole point,
+  // mid-turn too, so each reading carries the session's running cost: a turn still running
+  // counts for its client.
   on('session.measure', async ($, e, next) => {
-    const usd = e.cost?.usd
     if (e.changed.includes('rateLimits') && e.rateLimits.length) {
-      const t = await $.clock.now()
-      if (typeof usd === 'number') lastCostAt = t
       void append($, {
-        t,
+        t: await $.clock.now(),
         kind: 'limits',
         limits: e.rateLimits.map(l => ({ k: l.kind, p: l.percentUsed, r: l.resetsAt })),
-        cost: usd,
+        cost: e.cost?.usd,
       })
       void refreshBand($)
-    } else if (e.changed.includes('cost') && typeof usd === 'number') {
-      const t = await $.clock.now()
-      if (t - lastCostAt >= COST_EVERY_MS) {
-        lastCostAt = t
-        void append($, { t, kind: 'cost', cost: usd })
-      }
     }
     return next(e)
   })
