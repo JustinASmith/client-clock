@@ -1,0 +1,25 @@
+{
+  "name": "client-clock",
+  "owner": {
+    "name": "Justin Smith",
+    "url": "https://justinsmith.sh"
+  },
+  "metadata": {
+    "description": "Per-client time, usage and cost for Claude Code"
+  },
+  "plugins": [
+    {
+      "name": "client-clock",
+      "source": "./",
+      "description": "Logs your time, Claude's time and your 5-hour/weekly usage per client, so client work is easy to bill and budget",
+      "version": "0.1.0",
+      "author": {
+        "name": "Justin Smith",
+        "url": "https://justinsmith.sh"
+      },
+      "license": "MIT",
+      "keywords": ["time tracking", "billing", "usage limits", "freelance", "mod"],
+      "category": "productivity"
+    }
+  ]
+}

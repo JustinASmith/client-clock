@@ -1,0 +1,14 @@
+{
+  "name": "client-clock",
+  "version": "0.1.0",
+  "description": "Logs your time, Claude's time and your 5-hour/weekly usage per client, so client work is easy to bill and budget",
+  "author": {
+    "name": "Justin Smith",
+    "url": "https://justinsmith.sh"
+  },
+  "homepage": "https://github.com/JustinASmith/client-clock",
+  "repository": "https://github.com/JustinASmith/client-clock",
+  "license": "MIT",
+  "keywords": ["time tracking", "billing", "usage limits", "freelance", "mod"],
+  "types": "./types/index.d.ts"
+}
