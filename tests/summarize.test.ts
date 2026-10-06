@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { commitsIn, summarize } from '../hooks/register.tsx'
+import { commitsIn, labelFor, remoteKey, summarize } from '../hooks/register.tsx'
 import type { Rec } from '../hooks/register.tsx'
 
 const M = 60 * 1000
@@ -100,7 +100,9 @@ test('commits are yours on any local branch, counted once across worktrees', asy
         calls.push([...argv])
         if (argv.includes('config')) return { exitCode: 0, stdout: 'me@example.com\n', stderr: '' }
         // a checkout and a worktree of the same repo list the same commits
-        return { exitCode: 0, stdout: argv[2] === '/r/acme' ? 'aaa\nbbb\n' : 'bbb\nccc\n', stderr: '' }
+        const at = Math.round(t0 / 1000)
+        const lines = argv[2] === '/r/acme' ? [`aaa\t${at}\tAdd the form`, `bbb\t${at}\tFix the header`] : [`bbb\t${at}\tFix the header`, `ccc\t${at}\tShip it`]
+        return { exitCode: 0, stdout: `${lines.join('\n')}\n`, stderr: '' }
       },
     },
   }
@@ -108,4 +110,87 @@ test('commits are yours on any local branch, counted once across worktrees', asy
   const log = calls.find(argv => argv.includes('log')) ?? []
   expect(log).toContain('--branches')
   expect(log).toContain('--author=me@example.com')
+})
+
+test('usage splits by what each client spent, so a cheaper model weighs less', async () => {
+  const resets = new Date(t0 + 3 * H).toISOString()
+  const recs: Rec[] = [
+    { t: t0, kind: 'start', session: 'a', root: '/r/acme', cost: 0 },
+    { t: t0, kind: 'start', session: 'b', root: '/r/globex', cost: 0 },
+    { t: t0, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 10, r: resets }], cost: 0 },
+    // the same tokens, but acme's turn ran on a model three times the price
+    { t: t0 + 10 * M, kind: 'turn', session: 'a', root: '/r/acme', ms: 5 * M, tok: 1000, cost: 3 },
+    { t: t0 + 10 * M, kind: 'turn', session: 'b', root: '/r/globex', ms: 5 * M, tok: 1000, cost: 1 },
+    { t: t0 + 15 * M, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 30, r: resets }], cost: 3 },
+  ]
+  const totals = summarize(recs, map, t0, t0 + H, t0 + H)
+  expect(Math.round(totals.get('acme')?.fivePts ?? 0)).toBe(15)
+  expect(Math.round(totals.get('globex')?.fivePts ?? 0)).toBe(5)
+})
+
+test('a turn still running counts for its client once it has spent something', async () => {
+  const resets = new Date(t0 + 3 * H).toISOString()
+  const recs: Rec[] = [
+    { t: t0, kind: 'start', session: 'a', root: '/r/acme', cost: 0 },
+    { t: t0, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 10, r: resets }], cost: 0 },
+    { t: t0 + M, kind: 'prompt', session: 'a', root: '/r/acme', origin: 'composer' },
+    // no turn line yet: the turn is still running
+    { t: t0 + 10 * M, kind: 'cost', session: 'a', cost: 2 },
+    { t: t0 + 12 * M, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 20, r: resets }], cost: 2.4 },
+  ]
+  const totals = summarize(recs, map, t0, t0 + H, t0 + H)
+  expect(Math.round(totals.get('acme')?.fivePts ?? 0)).toBe(10)
+  expect(Math.round(totals.get('other (outside Claude Code)')?.fivePts ?? 0)).toBe(10)
+})
+
+test('a window that opened before the clock started counts as before tracking', async () => {
+  const resets = new Date(t0 + 3 * H).toISOString()
+  const recs: Rec[] = [
+    { t: t0, kind: 'start', session: 'a', root: '/r/acme', cost: 0 },
+    { t: t0 + M, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 40, r: resets }], cost: 0 },
+    { t: t0 + 10 * M, kind: 'turn', session: 'a', root: '/r/acme', ms: 5 * M, tok: 1000, cost: 1 },
+    { t: t0 + 11 * M, kind: 'limits', session: 'a', limits: [{ k: 'five_hour', p: 45, r: resets }], cost: 1 },
+  ]
+  const totals = summarize(recs, map, t0, t0 + H, t0 + H, { since: t0 })
+  expect(Math.round(totals.get('before tracking')?.fivePts ?? 0)).toBe(40)
+  expect(Math.round(totals.get('acme')?.fivePts ?? 0)).toBe(5)
+  expect(totals.get('other (outside Claude Code)')).toBeUndefined()
+})
+
+test('a session pinned with CLIENT_CLOCK_CLIENT counts for its pin, whatever its folder', async () => {
+  const recs: Rec[] = [
+    { t: t0, kind: 'start', session: 'a', root: '/r/acme', pin: 'globex' },
+    { t: t0 + 5 * M, kind: 'prompt', session: 'a', root: '/r/acme', origin: 'sdk' },
+    { t: t0 + 9 * M, kind: 'turn', session: 'a', root: '/r/acme', ms: 4 * M, tok: 100 },
+  ]
+  const totals = summarize(recs, map, t0, t0 + H, t0 + H)
+  expect(mins(totals.get('globex')?.agentMs ?? 0)).toBe(4)
+  expect(totals.get('acme')).toBeUndefined()
+})
+
+test('folder rules label tool folders, and a folder label or remote outranks a rule', async () => {
+  const labels = {
+    'rule:/home/me/.hyperframes-studio/Acme*': 'acme',
+    'rule:/home/me/.hyperframes-studio': 'studio',
+    '/home/me/.hyperframes-studio/AcmeOld': 'old',
+    'remote:github.com/globex/site': 'globex',
+  }
+  expect(labelFor(labels, '/home/me/.hyperframes-studio/AcmeLaunch', undefined)).toBe('acme')
+  expect(labelFor(labels, '/home/me/.hyperframes-studio/AcmeLaunch/renders', undefined)).toBe('acme')
+  expect(labelFor(labels, '/home/me/.hyperframes-studio/Untitled', undefined)).toBe('studio')
+  expect(labelFor(labels, '/home/me/.hyperframes-studio/AcmeOld', undefined)).toBe('old')
+  expect(labelFor(labels, '/home/me/.hyperframes-studio/AcmeOld', 'github.com/globex/site')).toBe('globex')
+  expect(labelFor(labels, '/home/me/elsewhere', undefined)).toBeNull()
+})
+
+test('every clone of a repo shares one remote key', async () => {
+  for (const url of [
+    'git@github.com:Acme/site.git',
+    'https://github.com/Acme/site',
+    'https://token@github.com/acme/site.git/',
+    'ssh://git@github.com:22/Acme/site.git',
+  ]) {
+    expect(remoteKey(url)).toBe('github.com/acme/site')
+  }
+  expect(remoteKey(null)).toBeNull()
 })

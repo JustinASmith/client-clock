@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { TestBody } from 'claude-code/testing'
 
 const NOW = Date.parse('2026-10-05T16:00:00Z')
 const M = 60 * 1000
@@ -15,9 +16,9 @@ const LEDGER =
     .map(r => JSON.stringify(r))
     .join('\n') + '\n'
 
-test('the /clock pane draws the windows and a client row on terminal and desktop', async ($, on) => {
+function setUp(on: Parameters<TestBody>[1], store: Record<string, unknown>) {
   mock.clock(on, { now: NOW })
-  mock.store(on, { clients: { '/r/acme': 'ACME' }, budgets: { ACME: 25 } })
+  mock.store(on, store)
   mock.env(on, { HOME: '/home/test' })
   on('session.id', () => ({ value: 'sess-1' }) as never)
   on('session.repo', () => ({ value: null }) as never)
@@ -43,20 +44,41 @@ test('the /clock pane draws the windows and a client row on terminal and desktop
   on('ui.open', () => ({ value: {} }) as never)
   on('ui.toast', () => ({ value: undefined }) as never)
   on('ui.log', () => ({ value: undefined }) as never)
+}
 
+const mount = ($: Parameters<TestBody>[0], surface: 'terminal' | 'desktop') =>
+  $.ui.mount({
+    plugin: 'client-clock',
+    surface,
+    component: 'Pane',
+    requestId: 'client-clock',
+    props: { title: 'Client clock', isFocused: false, bodyColumns: 80, placement: 'dock' } as never,
+  } as never)
+
+test('the /clock pane draws the windows, who used them, and a client row on terminal and desktop', async ($, on) => {
+  setUp(on, { clients: { '/r/acme': 'ACME' }, budgets: { ACME: 25 } })
   await $.command.run({ command: 'clock', args: '' } as never)
 
   for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({
-      plugin: 'client-clock',
-      surface,
-      component: 'Pane',
-      requestId: 'client-clock',
-      props: { title: 'Client clock', isFocused: false, bodyColumns: 80, placement: 'dock' } as never,
-    } as never)
+    const ui = await mount($, surface)
     expect(await ui.find({ text: /CLIENT CLOCK/ } as never)).toBeTruthy()
     expect(await ui.find({ text: /ACME/ } as never)).toBeTruthy()
     expect(await ui.find({ text: /31%/ } as never)).toBeTruthy()
+    // the window opened before the clock started, so its first 10 points are "before tracking"
+    expect(await ui.find({ text: /before tracking 10 · ACME 4/ } as never)).toBeTruthy()
+    await ui.unmount()
+  }
+})
+
+test('in demo mode the pane says so and shows the client as a letter', async ($, on) => {
+  setUp(on, { clients: { '/r/acme': 'ACME' }, demo: true })
+  await $.command.run({ command: 'clock', args: '' } as never)
+
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await mount($, surface)
+    expect(await ui.find({ text: /CLIENT CLOCK · demo/ } as never)).toBeTruthy()
+    expect(await ui.find({ text: /client a/ } as never)).toBeTruthy()
+    expect(await ui.find({ text: /ACME/ } as never)).toBeFalsy()
     await ui.unmount()
   }
 })

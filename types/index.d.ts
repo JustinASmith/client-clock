@@ -2,8 +2,10 @@
 export type ClientClockBand = {
   /** The repo's client label; null while the repo has none yet. */
   label: string | null
+  /** The label as shown: "client a" and so on in demo mode. */
+  shown: string | null
   /** Labels already used in other repos, offered as one-press choices. */
-  known: string[]
+  known: Array<{ label: string; shown: string }>
   /** Your time today on this client, in ms. */
   youMs: number
   /** Claude's working time today on this client, in ms (turns can overlap). */
@@ -38,10 +40,17 @@ export type ClientClockRow = {
   commits: number
   /** Weekly budget in points, when set. */
   budget: number | null
+  /** Your hourly rate for this client, when set. */
+  rate: number | null
+  /** Your time at that rate. */
+  billable: number | null
 }
 
+/** Each client's points of one usage window, largest first. */
+export type ClientClockSplit = Array<{ label: string; pts: number }>
+
 /** A usage window as the dashboard shows it. */
-export type ClientClockWindow = { pct: number; resetsAt: string | null }
+export type ClientClockWindow = { pct: number; resetsAt: string | null; split: ClientClockSplit }
 
 /** Everything the /clock pane draws. */
 export type ClientClockDash = {
@@ -52,6 +61,10 @@ export type ClientClockDash = {
   five: ClientClockWindow | null
   week: ClientClockWindow | null
   rows: ClientClockRow[]
+  /** The busiest folders no client covers (tools that run in folders of their own). */
+  loose: Array<{ name: string; ms: number }>
+  looseCount: number
+  demo: boolean
   updatedAt: number
 }
 
