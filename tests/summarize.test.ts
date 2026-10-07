@@ -200,3 +200,21 @@ test('CSV cells are quoted, and one a spreadsheet would run as a formula stays t
   expect(csvText('-1')).toBe('"\'-1"')
   expect(csvText('acme')).toBe('"acme"')
 })
+
+test('a phone checking in counts as you while Claude works, an open desktop app does not', async () => {
+  const recs: Rec[] = [
+    { t: t0, kind: 'start', session: 'a', root: '/r/acme' },
+    { t: t0, kind: 'attach', session: 'a', surface: 'desktop', client: 'desktop:default' },
+    { t: t0 + 60 * M, kind: 'turn', session: 'a', root: '/r/acme', ms: 60 * M, tok: 1000 },
+    { t: t0, kind: 'start', session: 'b', root: '/r/globex' },
+    { t: t0 + 10 * M, kind: 'attach', session: 'b', surface: 'mobile', client: 'phone' },
+    { t: t0 + 40 * M, kind: 'detach', session: 'b', surface: 'mobile', client: 'phone' },
+    { t: t0 + 60 * M, kind: 'turn', session: 'b', root: '/r/globex', ms: 60 * M, tok: 1000 },
+  ]
+  const totals = summarize(recs, map, t0, t0 + 2 * H, t0 + 2 * H)
+  // an hour of background work with the desktop app open is Claude's time, not yours
+  expect(mins(totals.get('acme')?.youMs ?? 0)).toBe(0)
+  expect(mins(totals.get('acme')?.agentMs ?? 0)).toBe(60)
+  // half an hour of checking in from a phone while Claude worked is yours
+  expect(mins(totals.get('globex')?.youMs ?? 0)).toBe(30)
+})

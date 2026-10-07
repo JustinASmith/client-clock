@@ -1,6 +1,6 @@
 {
   "name": "client-clock",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Logs your time, Claude's time and your 5-hour/weekly usage per client, so client work is easy to bill and budget",
   "author": {
     "name": "Justin Smith",

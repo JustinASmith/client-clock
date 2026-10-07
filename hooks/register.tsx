@@ -3,8 +3,8 @@
 // Every session appends its own events to ~/.claude/client-clock/ledger/<session>.jsonl
 // (one file per session, so parallel sessions never write the same file). Reports read
 // the files back and work out, per client:
-//   you     the gap before each prompt you send, up to IDLE_CAP_MS, plus time a phone or
-//           web client watched Claude work, plus /ledger add entries; overlapping
+//   you     the gap before each prompt you send, up to IDLE_CAP_MS, plus time a phone
+//           client watched Claude work, plus /ledger add entries; overlapping
 //           sessions count once, split evenly between the clients active at that moment
 //   Claude  the wall-clock length of Claude's turns (parallel sessions can overlap)
 //   usage   each rise in the 5-hour and weekly windows between two readings, split by what
@@ -370,7 +370,8 @@ export function summarize(
       } else if (r.kind === 'limits') {
         mark(r.t, r.cost)
       } else if (r.kind === 'attach') {
-        if (r.client && r.surface !== 'terminal') attached.set(r.client, r.t)
+        // A phone checking in counts; the desktop app and IDEs stay attached to any open session.
+        if (r.client && r.surface === 'mobile') attached.set(r.client, r.t)
       } else if (r.kind === 'detach') {
         const since = r.client ? attached.get(r.client) : undefined
         if (r.client && since !== undefined) {
@@ -383,7 +384,7 @@ export function summarize(
     }
     if (series.length > 1) costs.push(series)
     for (const since of attached.values()) watching.push({ a: since, b: now })
-    // A phone or web client counts as you only while Claude was working.
+    // A phone counts as you only while Claude was working.
     for (const w of watching) {
       for (const k of working) {
         const a = Math.max(w.a, k.a)
@@ -1241,7 +1242,7 @@ export const register: Register = on => {
           ]),
         ),
         '',
-        `You: the gap before each prompt, up to ${IDLE_CAP_MS / 60000} minutes, plus phone or web watching while Claude worked, plus /ledger add; overlapping sessions count once. Claude: turn time, which can overlap across sessions. Points are estimates: usage windows are account-wide, so each rise is split by what each client's sessions spent at API prices.`,
+        `You: the gap before each prompt, up to ${IDLE_CAP_MS / 60000} minutes, plus checking in from your phone while Claude worked, plus /ledger add; overlapping sessions count once. Claude: turn time, which can overlap across sessions. Points are estimates: usage windows are account-wide, so each rise is split by what each client's sessions spent at API prices.`,
       ].join('\n'),
     }
   })
@@ -1409,7 +1410,7 @@ export const register: Register = on => {
         ) : null}
         {buttons}
         <Box key="note" marginTop={1}>
-          <Text dimColor wrap="wrap">{`You = gaps before your prompts (up to ${IDLE_CAP_MS / 60000}m) plus watching Claude work. Points split your account-wide limits by what each client's sessions spent, so they're estimates. Updated ${updated}; /ledger has the full table.`}</Text>
+          <Text dimColor wrap="wrap">{`You = gaps before your prompts (up to ${IDLE_CAP_MS / 60000}m) plus checking in from your phone. Points split your account-wide limits by what each client's sessions spent, so they're estimates. Updated ${updated}; /ledger has the full table.`}</Text>
         </Box>
       </Box>
     )

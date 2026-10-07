@@ -6,7 +6,7 @@ A Claude Code mod that shows which client is using your time and your usage limi
 
 For each client it logs:
 
-- **your time**: the gap before each prompt you send, up to 10 minutes, plus time you spend watching Claude work from your phone or the web
+- **your time**: the gap before each prompt you send, up to 10 minutes, plus time you spend checking in from your phone while Claude works
 - **Claude's time**: how long each turn ran
 - **each client's share of your 5-hour and weekly limits**, in percentage points
 - **estimated cost** at API prices
@@ -70,7 +70,7 @@ A tool that calls Claude without Claude Code (claude.ai, the mobile app, another
 
 ## How it counts
 
-- **You**: the gap before each prompt you type, capped at 10 minutes so a break doesn't count. Watching from your phone or the web counts while Claude is working. Overlapping sessions count once, split between the clients active at that moment.
+- **You**: the gap before each prompt you type, capped at 10 minutes so a break doesn't count. Checking in from your phone counts while Claude is working. Having the session open in the desktop app or an IDE doesn't: Claude working in the background, unattended, is Claude's time, not yours. Overlapping sessions count once, split between the clients active at that moment.
 - **Claude**: each turn's duration. Turns in parallel sessions can overlap, so this can add up to more than the clock time.
 - **Points**: the 5-hour and weekly limits are account-wide, so each rise between two readings is split by what each client's sessions spent at API prices in between. API prices weigh models and output the way limits roughly do. Every reading carries the session's running cost, so a turn still running counts too. When no session logged a cost, the split falls back to tokens. These are estimates.
 - **Other and before tracking**: usage it can't tie to any session shows as "other". The usage already in a window when the clock started shows as "before tracking".

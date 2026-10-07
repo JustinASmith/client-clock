@@ -12,7 +12,7 @@
       "name": "client-clock",
       "source": "./",
       "description": "Logs your time, Claude's time and your 5-hour/weekly usage per client, so client work is easy to bill and budget",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "author": {
         "name": "Justin Smith",
         "url": "https://justinsmith.sh"
